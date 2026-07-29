@@ -6,16 +6,21 @@ import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
-from invoice_bot.bitrix import build_payload
+try:
+    import httpx
+except ModuleNotFoundError:
+    httpx = None
+
+from invoice_bot.bitrix import BitrixClient, build_payload
 from invoice_bot.config import load_settings
 from invoice_bot.dadata import organization_name
 from invoice_bot.models import Invoice
 from invoice_bot.recognition import merge_lines, parse_fields
 
 
-class CoreTests(unittest.TestCase):
+class CoreTests(unittest.IsolatedAsyncioTestCase):
     def test_dadata_secrets_load_from_environment(self) -> None:
         env = {
             "TELEGRAM_BOT_TOKEN": "telegram", "TELEGRAM_PROXY_URL": "socks5://127.0.0.1:10808",
@@ -67,6 +72,22 @@ class CoreTests(unittest.TestCase):
             invoice.task_number = 42
             self.assertEqual(invoice.errors(), [])
             self.assertEqual(build_payload(invoice)["UF_SEARCH_TASK"], 42)
+
+    @unittest.skipUnless(httpx, "httpx dependency is installed in Docker")
+    async def test_nested_deal_link_is_returned(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "invoice.pdf"
+            path.write_bytes(b"%PDF-")
+            invoice = Invoice(1, path, "pdf", datetime.now(), amount="1")
+            client = BitrixClient("https://bitrix.invalid", 1)
+            client.client.post = AsyncMock(
+                return_value=httpx.Response(200, json={"result": {"link_deal": "https://crm.invalid/deal/42/"}})
+            )
+            try:
+                result = await client.send(invoice)
+            finally:
+                await client.close()
+            self.assertEqual(result.link, "https://crm.invalid/deal/42/")
 
     def test_missing_fields_follow_automatic_question_order(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

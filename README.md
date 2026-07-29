@@ -21,7 +21,7 @@
 
 Скопируйте `config.example.ini` в `config.ini`. Секреты передавайте переменными `TELEGRAM_BOT_TOKEN`, `BITRIX_ENDPOINT_URL`, `DADATA_API_KEY`, `DADATA_SECRET_KEY`, `TELEGRAM_PROXY_URL`; они имеют приоритет над INI. Не задавайте `HTTP_PROXY`, `HTTPS_PROXY` или `ALL_PROXY`.
 
-Запрос Битрикс содержит `TITLE`, поля `UF_INVOICE_*`, `UF_ARTICLES_DDS`, обязательный положительный `UF_SEARCH_TASK` и один элемент `UF_INVOICE_FILES` с Base64 `DATA` и фактическим `EXT`. Любой HTTP 2xx считается успехом. HTTP-ошибка расходует попытку; timeout/ошибка соединения — нет.
+Запрос Битрикс содержит `TITLE`, поля `UF_INVOICE_*`, `UF_ARTICLES_DDS`, обязательный положительный `UF_SEARCH_TASK` и один элемент `UF_INVOICE_FILES` с Base64 `DATA` и фактическим `EXT`. Любой HTTP 2xx считается успехом. Если ответ содержит `result.link_deal`, бот показывает пользователю эту ссылку. HTTP-ошибка расходует попытку; timeout/ошибка соединения — нет.
 
 DaData вызывается POST-запросом `findById/party` с `branch_type=MAIN`. Название принимается только при точном совпадении ИНН и выбирается в порядке `short_with_opf`, `value`, `full_with_opf`. Результат, включая отсутствие названия, кэшируется на время активного счёта.
 

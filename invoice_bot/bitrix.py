@@ -48,7 +48,13 @@ class BitrixClient:
         if response.is_success:
             try:
                 data = response.json()
-                link = data.get("url") or data.get("link") if isinstance(data, dict) else None
+                if isinstance(data, dict):
+                    result = data.get("result")
+                    link = (
+                        (result.get("link_deal") if isinstance(result, dict) else None)
+                        or data.get("url")
+                        or data.get("link")
+                    )
             except ValueError:
                 pass
         return BitrixResult(response.is_success, response.status_code, link, response_text=text)
