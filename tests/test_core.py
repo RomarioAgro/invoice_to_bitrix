@@ -53,7 +53,7 @@ class CoreTests(unittest.TestCase):
             self.assertEqual(payload["UF_INVOICE_SUM_TO_PAY"], 42780)
             self.assertEqual(payload["UF_INVOICE_FILES"][0]["EXT"], "xlsx")
 
-    def test_optional_task_is_omitted_from_payload(self) -> None:
+    def test_optional_task_is_sent_as_empty_string(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "invoice.xlsx"
             path.write_bytes(b"test")
@@ -64,7 +64,7 @@ class CoreTests(unittest.TestCase):
                 dds_article=114830,
             )
             self.assertEqual(invoice.errors(), [])
-            self.assertNotIn("UF_SEARCH_TASK", build_payload(invoice))
+            self.assertEqual(build_payload(invoice)["UF_SEARCH_TASK"], "")
 
     def test_missing_fields_follow_automatic_question_order(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
