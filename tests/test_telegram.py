@@ -13,9 +13,11 @@ from invoice_bot.config import Choice
 from invoice_bot.models import Invoice
 
 try:
-    from invoice_bot.telegram_app import _request_field, normalize_caption, review_keyboard, summary
+    from telegram.ext import ApplicationHandlerStop
+    from invoice_bot.telegram_app import _request_field, access_guard, normalize_caption, review_keyboard, summary
 except ModuleNotFoundError:
-    _request_field = normalize_caption = summary = review_keyboard = None
+    ApplicationHandlerStop = None
+    _request_field = access_guard = normalize_caption = summary = review_keyboard = None
 
 
 @unittest.skipUnless(summary, "telegram dependency is installed in Docker")
@@ -44,6 +46,45 @@ class TelegramRenderingTests(unittest.TestCase):
 
 @unittest.skipUnless(_request_field, "telegram dependency is installed in Docker")
 class TelegramDialogueTests(unittest.IsolatedAsyncioTestCase):
+    def _context(self, allowed=(42,)):
+        settings = SimpleNamespace(allowed_user_ids=frozenset(allowed))
+        return SimpleNamespace(application=SimpleNamespace(bot_data={"runtime": SimpleNamespace(settings=settings)}))
+
+    async def test_access_guard_allows_whitelisted_private_user(self) -> None:
+        update = SimpleNamespace(
+            effective_user=SimpleNamespace(id=42), effective_chat=SimpleNamespace(type="private"),
+            effective_message=SimpleNamespace(), callback_query=None,
+        )
+        await access_guard(update, self._context())
+
+    async def test_access_guard_rejects_private_user_and_group(self) -> None:
+        message = SimpleNamespace(reply_text=AsyncMock())
+        denied = SimpleNamespace(
+            effective_user=SimpleNamespace(id=99), effective_chat=SimpleNamespace(type="private"),
+            effective_message=message, callback_query=None,
+        )
+        with self.assertRaises(ApplicationHandlerStop):
+            await access_guard(denied, self._context())
+        message.reply_text.assert_awaited_once_with("У вас нет доступа к этому боту")
+
+        group = SimpleNamespace(
+            effective_user=SimpleNamespace(id=42), effective_chat=SimpleNamespace(type="group"),
+            effective_message=SimpleNamespace(reply_text=AsyncMock()), callback_query=None,
+        )
+        with self.assertRaises(ApplicationHandlerStop):
+            await access_guard(group, self._context())
+        group.effective_message.reply_text.assert_not_awaited()
+
+    async def test_access_guard_rejects_callback(self) -> None:
+        query = SimpleNamespace(answer=AsyncMock())
+        update = SimpleNamespace(
+            effective_user=SimpleNamespace(id=99), effective_chat=SimpleNamespace(type="private"),
+            effective_message=None, callback_query=query,
+        )
+        with self.assertRaises(ApplicationHandlerStop):
+            await access_guard(update, self._context())
+        query.answer.assert_awaited_once_with("У вас нет доступа к этому боту", show_alert=True)
+
     async def test_missing_description_uses_required_prompt(self) -> None:
         message = SimpleNamespace(reply_text=AsyncMock())
         context = SimpleNamespace(user_data={})

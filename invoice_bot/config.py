@@ -27,6 +27,7 @@ class Settings:
 
     telegram_token: str
     telegram_proxy_url: str
+    allowed_user_ids: frozenset[int]
     bitrix_url: str
     bitrix_timeout: float
     dadata_url: str
@@ -64,6 +65,19 @@ def _choices(parser: configparser.ConfigParser, section: str) -> tuple[Choice, .
     return tuple(result)
 
 
+def _allowed_user_ids(parser: configparser.ConfigParser) -> frozenset[int]:
+    """Return a non-empty set of positive Telegram User IDs."""
+
+    raw = parser.get("access", "allowed_user_ids", fallback="").strip()
+    try:
+        result = frozenset(int(item.strip()) for item in raw.split(",") if item.strip())
+    except ValueError as error:
+        raise ConfigError("[access] allowed_user_ids должен содержать положительные целые числа") from error
+    if not result or any(user_id <= 0 for user_id in result):
+        raise ConfigError("[access] allowed_user_ids должен быть непустым списком положительных целых чисел")
+    return result
+
+
 def load_settings(path: str | Path = "config.ini") -> Settings:
     """Load INI config with secret overrides from environment."""
 
@@ -86,6 +100,7 @@ def load_settings(path: str | Path = "config.ini") -> Settings:
         settings = Settings(
             telegram_token=required("telegram", "bot_token", "TELEGRAM_BOT_TOKEN"),
             telegram_proxy_url=required("telegram", "proxy_url", "TELEGRAM_PROXY_URL"),
+            allowed_user_ids=_allowed_user_ids(parser),
             bitrix_url=required("bitrix", "endpoint_url", "BITRIX_ENDPOINT_URL"),
             bitrix_timeout=parser.getfloat("bitrix", "request_timeout_seconds"),
             dadata_url=parser.get("dadata", "endpoint_url"),

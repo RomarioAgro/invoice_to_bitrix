@@ -14,7 +14,7 @@ except ModuleNotFoundError:
     httpx = None
 
 from invoice_bot.bitrix import BitrixClient, build_payload
-from invoice_bot.config import load_settings
+from invoice_bot.config import ConfigError, load_settings
 from invoice_bot.dadata import organization_name
 from invoice_bot.models import Invoice
 from invoice_bot.recognition import merge_lines, parse_fields
@@ -31,6 +31,22 @@ class CoreTests(unittest.IsolatedAsyncioTestCase):
             settings = load_settings("config.example.ini")
         self.assertEqual(settings.dadata_api_key, "api")
         self.assertEqual(settings.dadata_secret_key, "secret")
+        self.assertEqual(settings.allowed_user_ids, frozenset({123456789, 987654321}))
+
+    def test_access_list_is_required_and_deduplicated(self) -> None:
+        source = Path("config.example.ini").read_text(encoding="utf-8")
+        env = {
+            "TELEGRAM_BOT_TOKEN": "telegram", "BITRIX_ENDPOINT_URL": "https://bitrix.invalid",
+            "DADATA_API_KEY": "api", "DADATA_SECRET_KEY": "secret",
+        }
+        with tempfile.TemporaryDirectory() as directory, patch.dict("os.environ", env, clear=True):
+            path = Path(directory) / "config.ini"
+            path.write_text(source.replace("123456789, 987654321", "42, 42, 7"), encoding="utf-8")
+            self.assertEqual(load_settings(path).allowed_user_ids, frozenset({42, 7}))
+            for invalid in ("", "0", "42, broken"):
+                path.write_text(source.replace("123456789, 987654321", invalid), encoding="utf-8")
+                with self.assertRaises(ConfigError):
+                    load_settings(path)
 
     def test_merge_removes_similar_line_with_same_numbers(self) -> None:
         merged = merge_lines("ИНН 1234567890", "инн  1234567890\nКПП 123456789")

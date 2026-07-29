@@ -12,7 +12,10 @@ from pathlib import Path
 from uuid import uuid4
 
 from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import (
+    Application, ApplicationHandlerStop, CallbackQueryHandler, CommandHandler, ContextTypes,
+    MessageHandler, TypeHandler, filters,
+)
 from telegram.request import HTTPXRequest
 
 from .bitrix import BitrixClient
@@ -35,6 +38,27 @@ def normalize_caption(caption: str | None) -> str | None:
     """Trim caption edges while preserving its internal plain text."""
 
     return (caption or "").strip() or None
+
+
+async def access_guard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Stop every non-private or non-whitelisted update before business handlers."""
+
+    settings: Settings = context.application.bot_data["runtime"].settings
+    user_id = update.effective_user.id if update.effective_user else None
+    chat_type = update.effective_chat.type if update.effective_chat else None
+    update_type = "callback" if update.callback_query else "message" if update.effective_message else "other"
+    if chat_type == "private" and user_id in settings.allowed_user_ids:
+        return
+    logger.warning(
+        "Telegram access denied user_id=%s update_type=%s chat_type=%s",
+        user_id, update_type, chat_type,
+    )
+    if update.callback_query:
+        text = "У вас нет доступа к этому боту" if chat_type == "private" else "Бот работает только в личных чатах"
+        await update.callback_query.answer(text, show_alert=True)
+    elif chat_type == "private" and update.effective_message:
+        await update.effective_message.reply_text("У вас нет доступа к этому боту")
+    raise ApplicationHandlerStop
 
 
 class BotRuntime:
@@ -417,6 +441,7 @@ def build_application(settings: Settings) -> Application:
     application = Application.builder().token(settings.telegram_token).request(request).get_updates_request(request).build()
     runtime = BotRuntime(settings)
     application.bot_data["runtime"] = runtime
+    application.add_handler(TypeHandler(Update, access_guard), group=-1)
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("status", status))
@@ -429,6 +454,7 @@ def build_application(settings: Settings) -> Application:
 
     async def post_init(app: Application) -> None:
         settings.temp_dir.mkdir(parents=True, exist_ok=True)
+        logger.info("Access whitelist loaded users=%s", len(settings.allowed_user_ids))
         await app.bot.delete_webhook(drop_pending_updates=False)
         await app.bot.set_my_commands([BotCommand("start", "Начать"), BotCommand("help", "Помощь"), BotCommand("status", "Статус"), BotCommand("cancel", "Отменить")])
 

@@ -2,6 +2,8 @@
 
 Бот принимает PDF/XLSX, использует подпись к файлу как описание счёта, локально извлекает остальные реквизиты, автоматически запрашивает недостающие обязательные поля и отправляет исходный файл с полями в Битрикс. Для корректных ИНН бот справочно получает названия организаций через DaData. Состояние хранится только в памяти; после перезапуска диалоги не восстанавливаются, оставшиеся файлы удаляет ежедневная очистка.
 
+Доступ закрыт по списку Telegram User ID из `[access] allowed_user_ids`. Бот обрабатывает только личные чаты; остальные updates останавливаются до скачивания файлов, OCR, изменения состояния и внешних API.
+
 ## Архитектура
 
 - `python-telegram-bot` long polling; его `HTTPXRequest` использует только SOCKS5 из `TELEGRAM_PROXY_URL`.
@@ -25,6 +27,42 @@
 Запрос Битрикс содержит `TITLE`, поля `UF_INVOICE_*`, `UF_ARTICLES_DDS`, обязательный положительный `UF_SEARCH_TASK` и один элемент `UF_INVOICE_FILES` с Base64 `DATA` и фактическим `EXT`. Любой HTTP 2xx считается успехом. Если ответ содержит `result.link_deal`, бот показывает пользователю эту ссылку. HTTP-ошибка расходует попытку; timeout/ошибка соединения — нет.
 
 DaData вызывается POST-запросом `findById/party` с `branch_type=MAIN`. Название принимается только при точном совпадении ИНН и выбирается в порядке `short_with_opf`, `value`, `full_with_opf`. Результат, включая отсутствие названия, кэшируется на время активного счёта.
+
+### Белый список Telegram
+
+`config.ini` на VPS содержит непустой список положительных Telegram User ID:
+
+```ini
+[access]
+allowed_user_ids = 123456789, 987654321
+```
+
+Пустой, отсутствующий или некорректный список блокирует запуск. Дубликаты допустимы и удаляются при чтении. `username`, Chat ID и имя пользователя не подходят.
+
+Чтобы безопасно узнать ID нового пользователя, попросите его написать боту в личном чате и найдите событие `Telegram access denied` в серверном логе: оно содержит только `user_id`, тип update и тип чата. Содержимое сообщения и файла не журналируется.
+
+Изменение списка на VPS без пересборки образа:
+
+```bash
+cd /opt/bitrix-invoice-bot
+sudo cp -a config.ini config.ini.bak
+sudoedit config.ini
+sudo docker compose run --rm --no-deps bot python -c "from invoice_bot.config import load_settings; load_settings()"
+sudo docker compose restart bot
+sudo docker compose ps
+sudo docker compose logs --tail=50 bot
+```
+
+Откат при ошибке:
+
+```bash
+cd /opt/bitrix-invoice-bot
+sudo cp -a config.ini.bak config.ini
+sudo docker compose run --rm --no-deps bot python -c "from invoice_bot.config import load_settings; load_settings()"
+sudo docker compose restart bot
+```
+
+Редактировать `/app/config.ini` внутри контейнера нельзя: источник истины — хостовый файл, подключённый read-only.
 
 ## Локальная проверка
 
