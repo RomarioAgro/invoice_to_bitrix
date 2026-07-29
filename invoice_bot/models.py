@@ -41,7 +41,7 @@ class Invoice:
 
         fields = (
             "number", "date", "customer_inn", "supplier_inn", "amount",
-            "pay_before", "description", "invoice_type", "dds_article",
+            "pay_before", "description", "invoice_type", "dds_article", "task_number",
         )
         return [name for name in fields if getattr(self, name) in (None, "")]
 

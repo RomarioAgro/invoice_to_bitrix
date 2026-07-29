@@ -69,7 +69,7 @@ def build_payload(invoice: Invoice) -> dict:
         "UF_INVOICE_PAY_BEFORE": invoice.pay_before or "",
         "UF_INVOICE_DESCRIPTION": invoice.description,
         "UF_ARTICLES_DDS": invoice.dds_article,
-        "UF_SEARCH_TASK": invoice.task_number or "",
+        "UF_SEARCH_TASK": invoice.task_number,
         "UF_INVOICE_FILES": [{"DATA": data, "EXT": invoice.extension}],
     }
     return payload

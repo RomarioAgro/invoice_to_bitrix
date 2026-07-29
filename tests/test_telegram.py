@@ -31,8 +31,7 @@ class TelegramRenderingTests(unittest.TestCase):
             text = summary(invoice, settings)
             self.assertIn("&lt;b&gt;7&lt;/b&gt;", text)
             self.assertIn("❗ <b>Дата счёта: не указано</b>", text)
-            self.assertIn("Номер задачи Битрикс: не указано (необязательно)", text)
-            self.assertNotIn("❗ <b>Номер задачи", text)
+            self.assertIn("❗ <b>Номер задачи Битрикс: не указано</b>", text)
             labels = [[button.text for button in row] for row in review_keyboard(invoice).inline_keyboard]
             self.assertNotIn("Продолжить", sum(labels, []))
 

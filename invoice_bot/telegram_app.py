@@ -89,8 +89,6 @@ def summary(invoice: Invoice, settings: Settings) -> str:
         line = f"{FIELD_LABELS[key]}: {shown}"
         if key in missing:
             line = f"❗ <b>{line}</b>"
-        elif key == "task_number" and value in (None, ""):
-            line += " (необязательно)"
         lines.append(line)
     return "Проверьте данные:\n" + "\n".join(lines)
 
@@ -224,15 +222,7 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             context.user_data["edit_field"] = field
             await query.answer()
             await query.edit_message_reply_markup(None)
-            markup = InlineKeyboardMarkup([[InlineKeyboardButton("Не указывать", callback_data="task:clear")]]) if field == "task_number" else None
-            await query.message.reply_text(f"Введите новое значение: {FIELD_LABELS[field]}", reply_markup=markup)
-        return
-    if data == "task:clear":
-        invoice.task_number = None
-        context.user_data.pop("edit_field", None)
-        await query.answer()
-        await query.edit_message_reply_markup(None)
-        await _advance(query.message, context, invoice, runtime)
+            await query.message.reply_text(f"Введите новое значение: {FIELD_LABELS[field]}")
         return
     if data.startswith("choose:"):
         _, field, key = data.split(":", 2)
@@ -310,6 +300,7 @@ async def _request_field(message, context: ContextTypes.DEFAULT_TYPE, field: str
             "amount": "Укажите сумму, например 42780.00.",
             "pay_before": "Укажите срок оплаты в формате ДД.ММ.ГГГГ.",
             "description": "Укажите описание счёта.",
+            "task_number": "Укажите положительный номер задачи Битрикс.",
         }
         await message.reply_text(f"Значение «{FIELD_LABELS[field]}» не указано. {hints[field]}")
 

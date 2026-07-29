@@ -53,7 +53,7 @@ class CoreTests(unittest.TestCase):
             self.assertEqual(payload["UF_INVOICE_SUM_TO_PAY"], 42780)
             self.assertEqual(payload["UF_INVOICE_FILES"][0]["EXT"], "xlsx")
 
-    def test_optional_task_is_sent_as_empty_string(self) -> None:
+    def test_task_is_required_and_sent_as_integer(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "invoice.xlsx"
             path.write_bytes(b"test")
@@ -63,8 +63,10 @@ class CoreTests(unittest.TestCase):
                 pay_before="30.07.2026", description="Оборудование", invoice_type=329,
                 dds_article=114830,
             )
+            self.assertIn("Не заполнено: task_number", invoice.errors())
+            invoice.task_number = 42
             self.assertEqual(invoice.errors(), [])
-            self.assertEqual(build_payload(invoice)["UF_SEARCH_TASK"], "")
+            self.assertEqual(build_payload(invoice)["UF_SEARCH_TASK"], 42)
 
     def test_missing_fields_follow_automatic_question_order(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -73,7 +75,7 @@ class CoreTests(unittest.TestCase):
             invoice = Invoice(1, path, "xlsx", datetime.now())
             self.assertEqual(
                 invoice.missing(),
-                ["number", "date", "customer_inn", "supplier_inn", "amount", "pay_before", "description", "invoice_type", "dds_article"],
+                ["number", "date", "customer_inn", "supplier_inn", "amount", "pay_before", "description", "invoice_type", "dds_article", "task_number"],
             )
 
     def test_dadata_name_requires_exact_inn(self) -> None:
