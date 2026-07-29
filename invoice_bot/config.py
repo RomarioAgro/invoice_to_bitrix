@@ -29,6 +29,10 @@ class Settings:
     telegram_proxy_url: str
     bitrix_url: str
     bitrix_timeout: float
+    dadata_url: str
+    dadata_timeout: float
+    dadata_api_key: str
+    dadata_secret_key: str
     max_concurrent: int
     max_attempts: int
     max_file_size: int
@@ -84,6 +88,10 @@ def load_settings(path: str | Path = "config.ini") -> Settings:
             telegram_proxy_url=required("telegram", "proxy_url", "TELEGRAM_PROXY_URL"),
             bitrix_url=required("bitrix", "endpoint_url", "BITRIX_ENDPOINT_URL"),
             bitrix_timeout=parser.getfloat("bitrix", "request_timeout_seconds"),
+            dadata_url=parser.get("dadata", "endpoint_url"),
+            dadata_timeout=parser.getfloat("dadata", "request_timeout_seconds"),
+            dadata_api_key=required("dadata", "api_key", "DADATA_API_KEY"),
+            dadata_secret_key=required("dadata", "secret_key", "DADATA_SECRET_KEY"),
             max_concurrent=parser.getint("processing", "max_concurrent_invoices"),
             max_attempts=parser.getint("processing", "max_send_attempts"),
             max_file_size=parser.getint("processing", "max_file_size_mb") * 1024 * 1024,

@@ -2,11 +2,11 @@
 
 ## Архитектура
 
-`telegram_app` управляет in-memory состояниями и вызывает `recognition` и `bitrix`; `config` строго загружает INI/env; Docker использует host network только для доступа к loopback SOCKS5.
+`telegram_app` управляет in-memory состояниями и вызывает `recognition`, `dadata` и `bitrix`; `config` строго загружает INI/env; Docker использует host network только для доступа к loopback SOCKS5.
 
 ## Принятые решения
 
-Telegram использует `HTTPXRequest` с SOCKS5. Bitrix использует отдельный `httpx.AsyncClient(trust_env=False)`. Техническая обработка не ставится в очередь, а занимает счётчик доступной ёмкости.
+Telegram использует `HTTPXRequest` с SOCKS5. Bitrix и DaData используют отдельные `httpx.AsyncClient(trust_env=False)`. Результат DaData кэшируется внутри активного счёта. Техническая обработка не ставится в очередь, а занимает счётчик доступной ёмкости.
 
 ## Инварианты
 

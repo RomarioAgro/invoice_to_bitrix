@@ -34,13 +34,14 @@ class Invoice:
     stage: str = "распознавание"
     sending: bool = False
     processed_callbacks: set[str] = field(default_factory=set)
+    organization_names: dict[str, str | None] = field(default_factory=dict)
 
     def missing(self) -> list[str]:
         """Return missing required form fields in dialogue order."""
 
         fields = (
             "number", "date", "customer_inn", "supplier_inn", "amount",
-            "description", "invoice_type", "dds_article", "task_number",
+            "pay_before", "description", "invoice_type", "dds_article",
         )
         return [name for name in fields if getattr(self, name) in (None, "")]
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import logging
 import re
 import shutil
@@ -16,6 +17,7 @@ from telegram.request import HTTPXRequest
 
 from .bitrix import BitrixClient
 from .config import Choice, Settings
+from .dadata import DaDataClient
 from .models import DATE_RE, INN_RE, Invoice
 from .recognition import FileRejected, extract_text, parse_fields, validate_file
 
@@ -38,6 +40,7 @@ class BotRuntime:
         self.user_locks: dict[int, asyncio.Lock] = {}
         self.capacity = settings.max_concurrent
         self.bitrix = BitrixClient(settings.bitrix_url, settings.bitrix_timeout)
+        self.dadata = DaDataClient(settings.dadata_url, settings.dadata_api_key, settings.dadata_timeout)
 
     def lock(self, user_id: int) -> asyncio.Lock:
         """Return the stable lock for one Telegram user."""
@@ -66,7 +69,7 @@ class BotRuntime:
 
 
 def summary(invoice: Invoice, settings: Settings) -> str:
-    """Render all Bitrix fields with human-readable labels."""
+    """Render an escaped HTML summary and highlight missing required fields."""
 
     types = {item.code: item.name for item in settings.invoice_types}
     articles = {item.code: item.name for item in settings.dds_articles}
@@ -77,17 +80,27 @@ def summary(invoice: Invoice, settings: Settings) -> str:
         "invoice_type": types.get(invoice.invoice_type), "dds_article": articles.get(invoice.dds_article),
         "task_number": invoice.task_number,
     }
-    return "Проверьте данные:\n" + "\n".join(
-        f"{FIELD_LABELS[key]}: {value if value not in (None, '') else 'не указано'}" for key, value in values.items()
-    )
+    missing = set(invoice.missing())
+    lines = []
+    for key, value in values.items():
+        shown = html.escape(str(value)) if value not in (None, "") else "не указано"
+        if key in {"customer_inn", "supplier_inn"} and value and invoice.organization_names.get(str(value)):
+            shown += f" — {html.escape(invoice.organization_names[str(value)] or '')}"
+        line = f"{FIELD_LABELS[key]}: {shown}"
+        if key in missing:
+            line = f"❗ <b>{line}</b>"
+        elif key == "task_number" and value in (None, ""):
+            line += " (необязательно)"
+        lines.append(line)
+    return "Проверьте данные:\n" + "\n".join(lines)
 
 
-def review_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("Продолжить", callback_data="review:continue")],
-        [InlineKeyboardButton("Изменить", callback_data="review:edit")],
-        [InlineKeyboardButton("Отменить", callback_data="review:cancel")],
-    ])
+def review_keyboard(invoice: Invoice) -> InlineKeyboardMarkup:
+    """Show Continue only when local validation passes."""
+
+    buttons = [] if invoice.errors() else [[InlineKeyboardButton("Продолжить", callback_data="review:continue")]]
+    buttons += [[InlineKeyboardButton("Изменить", callback_data="review:edit")], [InlineKeyboardButton("Отменить", callback_data="review:cancel")]]
+    return InlineKeyboardMarkup(buttons)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -166,8 +179,9 @@ async def receive_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             extract_text, path, extension, runtime.settings.ocr_language, runtime.settings.ocr_dpi
         )
         parse_fields(invoice, text)
+        await _enrich_inns(invoice, runtime)
         invoice.stage = "проверка данных"
-        await update.effective_message.reply_text(summary(invoice, runtime.settings), reply_markup=review_keyboard())
+        await _advance(update.effective_message, context, invoice, runtime)
     except FileRejected as error:
         shutil.rmtree(directory, ignore_errors=True)
         await update.effective_message.reply_text(str(error))
@@ -210,7 +224,15 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             context.user_data["edit_field"] = field
             await query.answer()
             await query.edit_message_reply_markup(None)
-            await query.message.reply_text(f"Введите новое значение: {FIELD_LABELS[field]}")
+            markup = InlineKeyboardMarkup([[InlineKeyboardButton("Не указывать", callback_data="task:clear")]]) if field == "task_number" else None
+            await query.message.reply_text(f"Введите новое значение: {FIELD_LABELS[field]}", reply_markup=markup)
+        return
+    if data == "task:clear":
+        invoice.task_number = None
+        context.user_data.pop("edit_field", None)
+        await query.answer()
+        await query.edit_message_reply_markup(None)
+        await _advance(query.message, context, invoice, runtime)
         return
     if data.startswith("choose:"):
         _, field, key = data.split(":", 2)
@@ -227,20 +249,19 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await query.edit_message_reply_markup(None)
         except Exception:
             logger.exception("Не удалось удалить устаревшую клавиатуру user_id=%s", invoice.user_id)
-        await query.message.reply_text(summary(invoice, runtime.settings), reply_markup=review_keyboard())
+        await _advance(query.message, context, invoice, runtime)
         return
     if data == "review:continue":
         await query.answer()
         await query.edit_message_reply_markup(None)
-        missing = invoice.missing()
-        if missing:
-            await _request_field(query.message, context, missing[0], runtime.settings)
-        else:
-            invoice.stage = "подтверждение"
-            await query.message.reply_text(
-                summary(invoice, runtime.settings),
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Отправить", callback_data="send:now")], [InlineKeyboardButton("Изменить", callback_data="review:edit")], [InlineKeyboardButton("Отменить", callback_data="review:cancel")]]),
-            )
+        if invoice.errors():
+            await _advance(query.message, context, invoice, runtime)
+            return
+        invoice.stage = "подтверждение"
+        await query.message.reply_text(
+            summary(invoice, runtime.settings), parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Отправить", callback_data="send:now")], [InlineKeyboardButton("Изменить", callback_data="review:edit")], [InlineKeyboardButton("Отменить", callback_data="review:cancel")]]),
+        )
         return
     if data in {"send:now", "send:retry"}:
         invoice.processed_callbacks.add(callback_id)
@@ -256,6 +277,24 @@ async def _show_choices(query, field: str, settings: Settings) -> None:
     await query.edit_message_reply_markup(InlineKeyboardMarkup(keyboard))
 
 
+async def _enrich_inns(invoice: Invoice, runtime: BotRuntime) -> None:
+    """Cache DaData names for all current valid INNs."""
+
+    for inn in {invoice.customer_inn, invoice.supplier_inn} - {None}:
+        if INN_RE.fullmatch(inn) and inn not in invoice.organization_names:
+            invoice.organization_names[inn] = await runtime.dadata.find_name(inn)
+
+
+async def _advance(message, context: ContextTypes.DEFAULT_TYPE, invoice: Invoice, runtime: BotRuntime) -> None:
+    """Show the current summary and ask the next missing required field."""
+
+    await message.reply_text(summary(invoice, runtime.settings), parse_mode="HTML", reply_markup=review_keyboard(invoice))
+    missing = invoice.missing()
+    if missing:
+        invoice.stage = f"ожидается: {FIELD_LABELS[missing[0]]}"
+        await _request_field(message, context, missing[0], runtime.settings)
+
+
 async def _request_field(message, context: ContextTypes.DEFAULT_TYPE, field: str, settings: Settings) -> None:
     if field in {"invoice_type", "dds_article"}:
         choices = settings.invoice_types if field == "invoice_type" else settings.dds_articles
@@ -263,7 +302,16 @@ async def _request_field(message, context: ContextTypes.DEFAULT_TYPE, field: str
         await message.reply_text(f"Выберите: {FIELD_LABELS[field]}", reply_markup=InlineKeyboardMarkup(keyboard))
     else:
         context.user_data["edit_field"] = field
-        await message.reply_text(f"Введите: {FIELD_LABELS[field]}")
+        hints = {
+            "number": "Укажите номер счёта.",
+            "date": "Укажите дату счёта в формате ДД.ММ.ГГГГ.",
+            "customer_inn": "Укажите ИНН заказчика: 10 или 12 цифр.",
+            "supplier_inn": "Укажите ИНН поставщика: 10 или 12 цифр.",
+            "amount": "Укажите сумму, например 42780.00.",
+            "pay_before": "Укажите срок оплаты в формате ДД.ММ.ГГГГ.",
+            "description": "Укажите описание счёта.",
+        }
+        await message.reply_text(f"Значение «{FIELD_LABELS[field]}» не указано. {hints[field]}")
 
 
 async def receive_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -281,10 +329,12 @@ async def receive_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.effective_message.reply_text(error)
         return
     setattr(invoice, field, int(value) if field == "task_number" else value.replace(",", ".") if field == "amount" else value)
+    if field in {"customer_inn", "supplier_inn"}:
+        await _enrich_inns(invoice, runtime)
     invoice.attempts_used = 0
     context.user_data.pop("edit_field", None)
     invoice.stage = "проверка данных"
-    await update.effective_message.reply_text(summary(invoice, runtime.settings), reply_markup=review_keyboard())
+    await _advance(update.effective_message, context, invoice, runtime)
 
 
 def _input_error(field: str, value: str) -> str | None:
@@ -296,7 +346,7 @@ def _input_error(field: str, value: str) -> str | None:
         return "Введите положительный номер задачи."
     if field == "amount" and not re.fullmatch(r"\d+(?:[.,]\d{1,2})?", value):
         return "Введите положительную сумму, например 42780.00."
-    if not value and field != "pay_before":
+    if not value:
         return "Значение не должно быть пустым."
     return None
 
@@ -305,7 +355,7 @@ async def _send_invoice(message, invoice: Invoice, runtime: BotRuntime) -> None:
     errors = invoice.errors()
     if errors:
         invoice.stage = "проверка данных"
-        await message.reply_text("Исправьте данные:\n" + "\n".join(errors), reply_markup=review_keyboard())
+        await message.reply_text("Исправьте данные:\n" + "\n".join(errors), reply_markup=review_keyboard(invoice))
         return
     if invoice.sending:
         await message.reply_text("Отправка уже выполняется.")
@@ -382,6 +432,7 @@ def build_application(settings: Settings) -> Application:
 
     async def post_shutdown(app: Application) -> None:
         await runtime.bitrix.close()
+        await runtime.dadata.close()
 
     application.post_init = post_init
     application.post_shutdown = post_shutdown

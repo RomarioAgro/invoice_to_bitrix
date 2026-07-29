@@ -10,4 +10,4 @@ Python 3.12 в Docker, python-telegram-bot 22.3, httpx 0.28.1, openpyxl, pypdf, 
 
 ## Интеграции
 
-Telegram Bot API через SOCKS5 `127.0.0.1:10808`; endpoint Битрикс напрямую. Production-секреты хранятся в root-only `.env.production`.
+Telegram Bot API через SOCKS5 `127.0.0.1:10808`; endpoints Битрикс и DaData напрямую. Production-секреты хранятся в root-only `.env.production`.

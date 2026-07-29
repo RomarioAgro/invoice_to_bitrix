@@ -58,7 +58,7 @@ def build_payload(invoice: Invoice) -> dict:
     """Serialize the validated invoice and original file."""
 
     data = base64.b64encode(invoice.path.read_bytes()).decode("ascii")
-    return {
+    payload = {
         "TITLE": f"Счёт {invoice.number}",
         "UF_INVOICE_TYPE": invoice.invoice_type,
         "UF_INVOICE_NUM": invoice.number,
@@ -69,6 +69,8 @@ def build_payload(invoice: Invoice) -> dict:
         "UF_INVOICE_PAY_BEFORE": invoice.pay_before or "",
         "UF_INVOICE_DESCRIPTION": invoice.description,
         "UF_ARTICLES_DDS": invoice.dds_article,
-        "UF_SEARCH_TASK": invoice.task_number,
         "UF_INVOICE_FILES": [{"DATA": data, "EXT": invoice.extension}],
     }
+    if invoice.task_number is not None:
+        payload["UF_SEARCH_TASK"] = invoice.task_number
+    return payload
