@@ -1,0 +1,7 @@
+python-telegram-bot[job-queue,socks]==22.3
+httpx[socks]==0.28.1
+openpyxl==3.1.5
+pypdf==5.9.0
+pdf2image==1.17.0
+pytesseract==0.3.13
+Pillow==11.3.0

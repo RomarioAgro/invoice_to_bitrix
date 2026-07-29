@@ -1,0 +1,17 @@
+services:
+  bot:
+    build: .
+    container_name: bitrix-invoice-bot
+    restart: unless-stopped
+    env_file:
+      - path: .env.production
+        required: false
+    volumes:
+      - ./config.ini:/app/config.ini:ro
+      - ./data:/app/data
+      - ./logs:/app/logs
+    network_mode: host
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL

@@ -1,0 +1,11 @@
+.env
+*.ini
+!*.example.ini
+.git
+.venv
+__pycache__
+.pytest_cache
+agents_report
+memory-bank
+*.pdf
+*.xlsx
