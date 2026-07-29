@@ -1,7 +1,7 @@
 <!-- ontoindex:start -->
 # OntoIndex — Code Intelligence
 
-This project is indexed by OntoIndex as **invoice_to_bitrix** (682 symbols, 1039 relationships, 16 execution flows). Use the OntoIndex MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by OntoIndex as **invoice_to_bitrix** (691 symbols, 1078 relationships, 15 execution flows). Use the OntoIndex MCP tools to understand code, assess impact, and navigate safely.
 
 > If any OntoIndex tool warns the index is stale, coordinate first; exactly one process should run `ontoindex analyze`.
 
