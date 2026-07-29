@@ -2,7 +2,7 @@
 
 ## Архитектура
 
-`telegram_app` управляет in-memory состояниями и вызывает `recognition`, `dadata` и `bitrix`; `config` строго загружает INI/env; Docker использует host network только для доступа к loopback SOCKS5.
+`telegram_app` управляет in-memory состояниями, нормализует подпись к файлу как описание и вызывает `recognition`, `dadata` и `bitrix`; `config` строго загружает INI/env; Docker использует host network только для доступа к loopback SOCKS5.
 
 ## Принятые решения
 

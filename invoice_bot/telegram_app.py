@@ -31,6 +31,12 @@ FIELD_LABELS = {
 }
 
 
+def normalize_caption(caption: str | None) -> str | None:
+    """Trim caption edges while preserving its internal plain text."""
+
+    return (caption or "").strip() or None
+
+
 class BotRuntime:
     """In-memory active invoices and synchronization primitives."""
 
@@ -170,7 +176,10 @@ async def receive_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         telegram_file = await document.get_file()
         await telegram_file.download_to_drive(path)
         validate_file(path, extension, runtime.settings.max_file_size, runtime.settings.max_pdf_pages)
-        invoice = Invoice(user_id, path, extension, datetime.now())
+        invoice = Invoice(
+            user_id, path, extension, datetime.now(),
+            description=normalize_caption(update.effective_message.caption),
+        )
         runtime.invoices[user_id] = invoice
         await update.effective_message.reply_text("Файл принят, распознаю данные…")
         text = await asyncio.to_thread(
@@ -292,6 +301,9 @@ async def _request_field(message, context: ContextTypes.DEFAULT_TYPE, field: str
         await message.reply_text(f"Выберите: {FIELD_LABELS[field]}", reply_markup=InlineKeyboardMarkup(keyboard))
     else:
         context.user_data["edit_field"] = field
+        if field == "description":
+            await message.reply_text("Описание счёта не указано. Введите описание счёта.")
+            return
         hints = {
             "number": "Укажите номер счёта.",
             "date": "Укажите дату счёта в формате ДД.ММ.ГГГГ.",
@@ -299,7 +311,6 @@ async def _request_field(message, context: ContextTypes.DEFAULT_TYPE, field: str
             "supplier_inn": "Укажите ИНН поставщика: 10 или 12 цифр.",
             "amount": "Укажите сумму, например 42780.00.",
             "pay_before": "Укажите срок оплаты в формате ДД.ММ.ГГГГ.",
-            "description": "Укажите описание счёта.",
             "task_number": "Укажите положительный номер задачи Битрикс.",
         }
         await message.reply_text(f"Значение «{FIELD_LABELS[field]}» не указано. {hints[field]}")

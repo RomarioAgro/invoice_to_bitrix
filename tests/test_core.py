@@ -126,6 +126,16 @@ class CoreTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(invoice.date, "27.07.2026")
             self.assertEqual(invoice.pay_before, "05.08.2026")
 
+    def test_description_is_not_extracted_from_document_text(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "invoice.xlsx"
+            path.write_bytes(b"test")
+            invoice = parse_fields(
+                Invoice(1, path, "xlsx", datetime.now()),
+                "Описание: это значение не должно извлекаться из документа",
+            )
+            self.assertIsNone(invoice.description)
+
 
 if __name__ == "__main__":
     unittest.main()
