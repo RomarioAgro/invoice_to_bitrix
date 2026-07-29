@@ -49,6 +49,17 @@ class CoreTests(unittest.TestCase):
             )
             self.assertIn("ИНН заказчика и поставщика должны различаться", invoice.errors())
 
+    def test_russian_month_date(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "invoice.xlsx"
+            path.write_bytes(b"test")
+            invoice = parse_fields(
+                Invoice(1, path, "xlsx", datetime.now()),
+                "Счёт № 7 от 27 июля 2026, оплатить до 5 августа 2026",
+            )
+            self.assertEqual(invoice.date, "27.07.2026")
+            self.assertEqual(invoice.pay_before, "05.08.2026")
+
 
 if __name__ == "__main__":
     unittest.main()

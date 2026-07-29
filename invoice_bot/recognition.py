@@ -10,6 +10,12 @@ from pathlib import Path
 
 from .models import Invoice
 
+DATE_PATTERN = r"\d{1,2}(?:[./-]\d{1,2}[./-]|\s+(?:января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)\s+)\d{4}"
+MONTHS = {
+    "января": 1, "февраля": 2, "марта": 3, "апреля": 4, "мая": 5, "июня": 6,
+    "июля": 7, "августа": 8, "сентября": 9, "октября": 10, "ноября": 11, "декабря": 12,
+}
+
 
 class FileRejected(ValueError):
     """Raised with a safe user-facing file rejection message."""
@@ -97,10 +103,10 @@ def parse_fields(invoice: Invoice, text: str) -> Invoice:
 
     flat = re.sub(r"[\u00a0\s]+", " ", text)
     number = re.search(r"сч[её]т(?:\s+на\s+оплату)?\s*№?\s*([\wА-Яа-яЁё./-]+)", flat, re.I)
-    date = re.search(r"(?:от\s*)?(\d{1,2}[./-]\d{1,2}[./-]\d{4})", flat)
+    date = re.search(rf"(?:от\s*)?({DATE_PATTERN})", flat, re.I)
     inns = list(dict.fromkeys(re.findall(r"\bИНН\s*[:№]?\s*(\d{10}|\d{12})\b", flat, re.I)))
     amount = re.search(r"(?:итого|всего\s+к\s+оплате|на\s+сумму)\D{0,30}([\d\s\u00a0]+[,.]\d{2})", flat, re.I)
-    pay_before = re.search(r"(?:оплатить\s+до|срок\s+оплаты)\D{0,20}(\d{1,2}[./-]\d{1,2}[./-]\d{4})", flat, re.I)
+    pay_before = re.search(rf"(?:оплатить\s+до|срок\s+оплаты)\D{{0,20}}({DATE_PATTERN})", flat, re.I)
     if number:
         invoice.number = number.group(1)
     if date:
@@ -117,6 +123,12 @@ def parse_fields(invoice: Invoice, text: str) -> Invoice:
 
 
 def _date(value: str) -> str:
+    words = value.lower().split()
+    if len(words) == 3 and words[1] in MONTHS:
+        try:
+            return datetime(int(words[2]), MONTHS[words[1]], int(words[0])).strftime("%d.%m.%Y")
+        except ValueError:
+            return value
     for separator in (".", "/", "-"):
         try:
             return datetime.strptime(value, f"%d{separator}%m{separator}%Y").strftime("%d.%m.%Y")
