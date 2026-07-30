@@ -74,6 +74,18 @@ class CoreTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(payload["UF_INVOICE_SUM_TO_PAY"], 42780)
             self.assertEqual(payload["UF_INVOICE_FILES"][0]["EXT"], "xlsx")
 
+    def test_inn_with_kpp_labels(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "invoice.pdf"
+            path.write_bytes(b"%PDF-")
+            invoice = parse_fields(
+                Invoice(1, path, "pdf", datetime.now()),
+                "Получатель ИНН/КПП 9704254424/770401001\n"
+                "Плательщик ИНН / КПП: 4345159166/434501001",
+            )
+            self.assertEqual(invoice.supplier_inn, "9704254424")
+            self.assertEqual(invoice.customer_inn, "4345159166")
+
     def test_task_is_required_and_sent_as_integer(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "invoice.xlsx"

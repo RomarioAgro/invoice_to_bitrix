@@ -104,7 +104,7 @@ def parse_fields(invoice: Invoice, text: str) -> Invoice:
     flat = re.sub(r"[\u00a0\s]+", " ", text)
     number = re.search(r"сч[её]т(?:\s+на\s+оплату)?\s*№?\s*([\wА-Яа-яЁё./-]+)", flat, re.I)
     date = re.search(rf"(?:от\s*)?({DATE_PATTERN})", flat, re.I)
-    inns = list(dict.fromkeys(re.findall(r"\bИНН\s*[:№]?\s*(\d{10}|\d{12})\b", flat, re.I)))
+    inns = list(dict.fromkeys(re.findall(r"\bИНН(?:\s*/\s*КПП)?\s*[:№]?\s*(\d{10}|\d{12})\b", flat, re.I)))
     amount = re.search(r"(?:итого|всего\s+к\s+оплате|на\s+сумму)\D{0,30}([\d\s\u00a0]+[,.]\d{2})", flat, re.I)
     pay_before = re.search(rf"(?:оплатить\s+до|срок\s+оплаты)\D{{0,20}}({DATE_PATTERN})", flat, re.I)
     if number:
