@@ -86,6 +86,33 @@ class CoreTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(invoice.supplier_inn, "9704254424")
             self.assertEqual(invoice.customer_inn, "4345159166")
 
+    def test_invoice_991161_prefers_invoice_number_and_total_due(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "invoice.pdf"
+            path.write_bytes(b"%PDF-")
+            invoice = parse_fields(
+                Invoice(1, path, "pdf", datetime.now()),
+                "Оплата согласно счету № 24004-29757 от 20.07.2026\n"
+                "Для зачисления необходимо указать номер лицевого счета.\n"
+                "Счет № 24004-29757 от 20.07.2026\n"
+                "Итого без НДС, руб.: 2 828,57\n"
+                "Итого с НДС, руб.: 2 970,00\n"
+                "Всего к оплате, руб.: 2 970,00",
+            )
+            self.assertEqual(invoice.number, "24004-29757")
+            self.assertEqual(invoice.amount, "2970.00")
+
+    def test_yandex_invoice_number_without_number_sign(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "invoice.pdf"
+            path.write_bytes(b"%PDF-")
+            invoice = parse_fields(
+                Invoice(1, path, "pdf", datetime.now()),
+                "Счёт на оплату 59709636865 от 30 июля 2026 г. "
+                "Счёт действителен в течение 3 рабочих дней.",
+            )
+            self.assertEqual(invoice.number, "59709636865")
+
     def test_task_is_required_and_sent_as_integer(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "invoice.xlsx"

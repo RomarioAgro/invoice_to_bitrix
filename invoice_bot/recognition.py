@@ -102,10 +102,16 @@ def parse_fields(invoice: Invoice, text: str) -> Invoice:
     """Populate fields found by conservative Russian invoice patterns."""
 
     flat = re.sub(r"[\u00a0\s]+", " ", text)
-    number = re.search(r"сч[её]т(?:\s+на\s+оплату)?\s*№?\s*([\wА-Яа-яЁё./-]+)", flat, re.I)
+    number = re.search(r"\bсч[её]т(?:\s+на\s+оплату)?\s*№\s*([\wА-Яа-яЁё./-]+)", flat, re.I) or re.search(
+        r"\bсч[её]т\s+на\s+оплату\s+([\wА-Яа-яЁё./-]+)", flat, re.I
+    )
     date = re.search(rf"(?:от\s*)?({DATE_PATTERN})", flat, re.I)
     inns = list(dict.fromkeys(re.findall(r"\bИНН(?:\s*/\s*КПП)?\s*[:№]?\s*(\d{10}|\d{12})\b", flat, re.I)))
-    amount = re.search(r"(?:итого|всего\s+к\s+оплате|на\s+сумму)\D{0,30}([\d\s\u00a0]+[,.]\d{2})", flat, re.I)
+    amount = re.search(
+        r"(?:всего\s+к\s+оплате|к\s+оплате|итого\s+с\s+ндс|на\s+сумму)\D{0,30}([\d\s\u00a0]+[,.]\d{2})",
+        flat,
+        re.I,
+    ) or re.search(r"итого\D{0,30}([\d\s\u00a0]+[,.]\d{2})", flat, re.I)
     pay_before = re.search(rf"(?:оплатить\s+до|срок\s+оплаты)\D{{0,20}}({DATE_PATTERN})", flat, re.I)
     if number:
         invoice.number = number.group(1)
