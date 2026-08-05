@@ -350,6 +350,8 @@ async def receive_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.effective_message.reply_text("Отправьте PDF или XLSX либо используйте /status.")
         return
     value = update.effective_message.text.strip()
+    if field == "pay_before":
+        value = value.replace(",", ".")
     error = _input_error(field, value)
     if error:
         await update.effective_message.reply_text(error)
